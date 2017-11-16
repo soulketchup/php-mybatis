@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+	<!--
+	<environments default="test">
+		<environment id="service">
+			<dataSource>
+				<property name="url" value="mysql:dbname=service;host=127.0.0.1;charset=UTF8;port=3306;" />
+				<property name="username" value="service" />
+				<property name="password" value="" />
+			</dataSource>
+		</environment>
+		<environment id="test">
+			<dataSource>
+				<property name="url" value="mysql:dbname=test;host=127.0.0.1;charset=UTF8;port=3306;" />
+				<property name="username" value="test" />
+				<property name="password" value="test" />
+			</dataSource>
+		</environment>
+	</environments>
+	-->
+	<mappers>
+		<mapper resource="./mybatis-mapper-posts.xml" />
+	</mappers>
+</configuration>

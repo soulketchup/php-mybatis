@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mapper namespace="test">
+	<sql id="Where">
+		<where>
+			<if test="search != null and !empty(search)">
+				(subject like #{search} or contents like #{search})
+			</if>
+		</where>
+	</sql>
+	<select id="Count" resultType="int">
+		select count(*) from ${table}
+		<include refid="Where" />
+	</select>
+	<select id="List" resultType="TestModel">
+		select * from ${table}
+		<include refid="Where" />
+		order by id desc limit #{limit}
+	</select>
+	<select id="Detail" resultType="TestModel">
+		select * from ${table} where id = #{id}
+	</select>
+	<insert id="Create" useGeneratedKeys="true" keyProperty="id">
+		insert into ${table}(subject, contents) values(#{subject}, #{contents})
+	</insert>
+	<update id="Modify">
+		update ${table}
+		<set>
+			<if test="subject != null and !empty(subject)">,subject = #{subject}</if>
+			<if test="contents != null and !empty(contents)">,contents = #{contents}</if>
+		</set>
+		where id = #{id}
+	</update>
+	<delete id="Remove">
+		delete ${table} where id = #{id}
+	</delete>
+</mapper>
