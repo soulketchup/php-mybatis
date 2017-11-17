@@ -121,7 +121,7 @@ class Mapper {
      * @param string $var : name of php variable
      * @return void
      */
-    private function parseChooseStatement($namespace, &$body, &$node, $var = 'sql') {
+    private function parseChooseStatement($namespace, &$body, &$node, $var = '$sql') {
         foreach ($node->getElementsByTagName('when') as $i => $child) {
             if ($i == 0) {
                 $body .= 'if (' . Ognl::parse($child->getAttribute('test')) . ') {' . PHP_EOL;
@@ -145,15 +145,15 @@ class Mapper {
      * @param string $var : name of php variable
      * @return void
      */
-    private function parseWhereStatement($namespace, &$body, &$node, $var = 'sql') {
+    private function parseWhereStatement($namespace, &$body, &$node, $var = '$sql') {
         $varWhere = $var . '_where';
-        $body .= '$' . $varWhere . '=\'\';' . PHP_EOL;
+        $body .= $varWhere . '=\'\';' . PHP_EOL;
         if ($node->hasChildNodes()) {
             foreach ($node->childNodes as $child) {
                 $this->parseStatement($namespace, $body, $child, $varWhere);
             }
-            $body .= 'if (!empty($' . $varWhere . ')) {' . PHP_EOL;
-            $body .= '$' . $var . '.=\' where \' . preg_replace(\'/^\s?(or|and)\s+/i\', \'\', $' . $varWhere . ');' . PHP_EOL;
+            $body .= 'if (!empty(' . $varWhere . ')) {' . PHP_EOL;
+            $body .= $var . '.=\' where \' . preg_replace(\'/^\s?(or|and)\s+/i\', \'\', ' . $varWhere . ');' . PHP_EOL;
             $body .= '}' . PHP_EOL;
         }
     }
@@ -165,15 +165,15 @@ class Mapper {
      * @param string $var : name of php variable
      * @return void
      */
-    private function parseSetStatement($namespace, &$body, &$node, $var = 'sql') {
+    private function parseSetStatement($namespace, &$body, &$node, $var = '$sql') {
         $varSet = $var . '_set';
-        $body .= '$' . $varSet . '=\'\';' . PHP_EOL;
+        $body .= $varSet . '=\'\';' . PHP_EOL;
         if ($node->hasChildNodes()) {
             foreach ($node->childNodes as $child) {
                 $this->parseStatement($namespace, $body, $child, $varSet);
             }
-            $body .= 'if (!empty($' . $varSet . ')) {' . PHP_EOL;
-            $body .= '$' . $var . '.=\' set \' . preg_replace(\'/^\s?,\s?|\s?,\s?$/\', \'\', $' . $varSet . ');' . PHP_EOL;
+            $body .= 'if (!empty(' . $varSet . ')) {' . PHP_EOL;
+            $body .= $var . '.=\' set \' . preg_replace(\'/^\s?,\s?|\s?,\s?$/\', \'\', ' . $varSet . ');' . PHP_EOL;
             $body .= '}' . PHP_EOL;
         }
     }
@@ -185,7 +185,7 @@ class Mapper {
      * @param string $var : name of php variable
      * @return void
      */
-    private function parseForEachStatement($namespace, &$body, &$node, $var = 'sql') {
+    private function parseForEachStatement($namespace, &$body, &$node, $var = '$sql') {
         $varLoop = $var . '_loop';
         $collection = $node->getAttribute('collection');
         $item = $node->getAttribute('item');
@@ -193,7 +193,7 @@ class Mapper {
         $open = $node->getAttribute('open');
         $close = $node->getAttribute('close');
         $separator = $node->getAttribute('separator');
-        $body .= '$' . $varLoop . '=\'\';' . PHP_EOL;
+        $body .= $varLoop . '=\'\';' . PHP_EOL;
         if ($node->hasChildNodes()) {
             $body .= '$i=0;' . PHP_EOL;
             $body .= 'foreach (' . Ognl::getClassName() . '::evaluate($param, \'' . $collection . '\') as $forEachIndex => $forEachItem) {' . PHP_EOL;
@@ -202,16 +202,16 @@ class Mapper {
                 $body .= '$temp.=($i > 0 ? \'' . $this->quote($separator) . '\' : \'\');' . PHP_EOL;
             }
             foreach ($node->childNodes as $child) {
-                $this->parseStatement($namespace, $body, $child, 'temp');
+                $this->parseStatement($namespace, $body, $child, '$temp');
             }
-            $body .= '$' . $varLoop . '.=$this->parseForEachSql($i, $temp, \'' . $this->quote($collection) . '\', \'' . $this->quote($index) . '\', $forEachIndex, \'' . $this->quote($item) . '\', $forEachItem, $param, $sqlParam);' . PHP_EOL;
+            $body .= $varLoop . '.=$this->parseForEachSql($i, $temp, \'' . $this->quote($collection) . '\', \'' . $this->quote($index) . '\', $forEachIndex, \'' . $this->quote($item) . '\', $forEachItem, $param, $sqlParam);' . PHP_EOL;
             $body .= '$i++;' . PHP_EOL;
             $body .= '}' . PHP_EOL;
         }
-        $body .= 'if (!empty($' . $varLoop . ')) {' . PHP_EOL;
-        $body .= '$' . $var . '.=\'' . $this->quote($open) . '\';' . PHP_EOL;
-        $body .= '$' . $var . '.=$' . $varLoop . ';' . PHP_EOL;
-        $body .= '$' . $var . '.=\'' . $this->quote($close) . '\';' . PHP_EOL;
+        $body .= 'if (!empty(' . $varLoop . ')) {' . PHP_EOL;
+        $body .= $var . '.=\'' . $this->quote($open) . '\';' . PHP_EOL;
+        $body .= $var . '.=' . $varLoop . ';' . PHP_EOL;
+        $body .= $var . '.=\'' . $this->quote($close) . '\';' . PHP_EOL;
         $body .= '}' . PHP_EOL;
     }
 
@@ -231,13 +231,13 @@ class Mapper {
      * @param string $var : name of php variable
      * @return void
      */
-    private function parseStatement($namespace, &$body, &$node, $var = 'sql') {
+    private function parseStatement($namespace, &$body, &$node, $var = '$sql') {
         switch ($node->nodeType) {
             case XML_TEXT_NODE:
             case XML_CDATA_SECTION_NODE:
                 $sql = trim($node->textContent);
                 if ($sql) {
-                    $body .= '$' . $var . '.=\' ' . $this->quote($sql) . ' \';' . PHP_EOL;
+                    $body .= $var . '.=\' ' . $this->quote($sql) . ' \';' . PHP_EOL;
                 }
                 return;
         }
@@ -391,12 +391,8 @@ class Mapper {
         }
         $translated = $body;
         $f = create_function('', 'return function(){' . $body . '};');
-        if ($f) {
-            $c = \Closure::bind($f(), $this);
-            $c();
-        } else {
-            throw new \Exception(__CLASS__ . '::initXml() failed');
-        }
+        $c = \Closure::bind($f(), $this);
+        $c();
     }
 
     /**

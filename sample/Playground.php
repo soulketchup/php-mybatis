@@ -11,54 +11,64 @@ $param = isset($_POST['param']) ? $_POST['param'] : '';
 if (empty($xml)) {
     $xml = trim('<?xml version="1.0" encoding="utf-8"?>
 <mapper namespace="Test">
-  <sql id="where">
-    <where>
-      <if test="search != null and !empty(search)">
-        and (subject like #{search} or contents like #{search})
-      </if>
-    </where>
-  </sql>
-  <select id="Count" resultType="int">
-    select count(*) from ${tableName}
-    <include refid="where" />
-  </select>
-  <select id="List" resultType="array">
-    select * from ${tableName}
-    <include refid="where" />
-    order by id desc
-    <if test="limit != null and limit gt 0">
-      limit ${limit}
-    </if>
-  </select>
-  <insert id="Insert">
-    <foreach collection="items" item="item" index="index">
-      insert into ${tableName} values(#{index}, #{item.subject}, #{item.contents});
-    </foreach>
-  </insert>
-  <insert id="Insert2">
-    insert into ${tableName} (idx, subject, contents) values
-    <foreach collection="items" item="item" index="index" open="(" close=");" separator="),(">
-      #{index}, #{item.subject}, #{item.contents}
-    </foreach>
-  </insert>
+    <sql id="where">
+        <where>
+            <if test="search != null and !empty(search)">
+            and (subject like #{search} or contents like #{search})
+            </if>
+        </where>
+    </sql>
+    <select id="Count" resultType="int">
+        select count(*) from ${tableName}
+        <include refid="where" />
+    </select>
+    <select id="List" resultType="array">
+        select * from ${tableName}
+        <include refid="where" />
+        order by id desc
+        <if test="limit != null and limit gt 0">
+            limit ${limit}
+        </if>
+    </select>
+    <insert id="Insert">
+        <foreach collection="items" item="item" index="index">
+            insert into ${tableName} values(#{index}, #{item.subject}, #{item.contents});
+        </foreach>
+    </insert>
+    <insert id="Insert2">
+        insert into ${tableName} (idx, subject, contents) values
+        <foreach collection="items" item="item" index="index" open="(" close=");" separator="),(">
+            #{index}, #{item.subject}, #{item.contents}
+        </foreach>
+    </insert>
+    <update id="Update1">
+        <foreach collection="items" item="item" index="index" separator=";">
+            update ${tableName}
+            <set>
+                <if test="item.subject != null"> , subject = #{item.subject}</if>
+                <if test="item.contents != null"> , contents = #{item.contents}</if>
+            </set>
+            where idx = #{index}
+        </foreach>
+    </update>
 </mapper>');
 }
 
 if (empty($param)) {
     $param = '{
-  "tableName": "posts",
-  "search": "%test%",
-  "items": [
-    {
-        "subject": "test 1",
-        "contents": "contents 1"
-    },
-    {
-        "subject": "test 2",
-        "contents": "contents 2"
-    }
-  ],
-  "limit": 10
+    "tableName": "posts",
+    "search": "%test%",
+    "items": [
+        {
+            "subject": "test 1",
+            "contents": "contents 1"
+        },
+        {
+            "subject": "test 2",
+            "contents": "contents 2"
+        }
+    ],
+    "limit": 10
 }';
 }
 
