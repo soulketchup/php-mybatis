@@ -335,4 +335,13 @@ class Ognl {
 		}
 		return $result;
 	}
+
+	/**
+	 * returns class name
+	 *
+	 * @return string
+	 */
+	public static function getClassName() {
+		return __CLASS__;
+	}
 }

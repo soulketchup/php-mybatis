@@ -71,17 +71,34 @@ class Mapper {
 
     /**
      * parse "foreach" tag and set SQL parameter
-     * @param string $sql : translated SQL of "foreach" tag
-     * @param string $name : value of "collection" attribute
      * @param int $i : current loop index
-     * @param mixed $arr : current loop item
+     * @param string $sql : translated SQL of "foreach" tag
+     * @param string $collectionName : "collection" attribute value of "foreach" tag
+     * @param string $indexName : "index" attribute value of "foreach" tag
+     * @param mixed $index : current loop index or key
+     * @param string $itemName : "item" attribute value of "foreach" tag
+     * @param mixed $item : current loop item
+     * @param mixed $param : input parameter object
      * @param array $sqlParam : SQL parameter
      * @return string
      */
-    private function parseForEachSql($sql, $name, $i, $arr, &$sqlParam) {
-        $sql = preg_replace_callback('/(\$|#)\{([\s\S]+?)\}/', function ($matches) use (&$name, &$i, &$arr, &$sqlParam) {
+    public function parseForEachSql($i, $sql, $collectionName, $indexName, $index, $itemName, $item, &$param, &$sqlParam) {
+        $sql = preg_replace_callback('/(\$|#)\{([\s\S]+?)\}/', function ($matches) use (&$i, &$collectionName, &$indexName, &$index, &$itemName, &$item, &$param, &$sqlParam) {
             $expr = $matches[2];
-            $v = Ognl::evaluate($arr, $expr);
+            $varPrefix = strtok(trim($expr), '.');
+            $isItemScope = (!empty($itemName) && $varPrefix == $itemName) || (!empty($indexName) && $varPrefix == $indexName);
+            if ($isItemScope) {
+                $arr = [];
+                if (!empty($itemName)) {
+                    $arr[$itemName] = $item;
+                }
+                if (!empty($indexName)) {
+                    $arr[$indexName] = $index;
+                }
+                $v = Ognl::evaluate($arr, $expr);
+            } else {
+                $v = Ognl::evaluate($param, $expr);
+            }
             if ($matches[1] == '$') {
                 if (is_null($v)) {
                     return 'NULL';
@@ -89,7 +106,7 @@ class Mapper {
                     return $v;
                 }
             } else {
-                $sqlParamName = ':' . $name  . '_' . preg_replace('/[^\w]+/', '_', $expr) . '_' . $i;
+                $sqlParamName = ':' . preg_replace('/[^\w_]+/', '_', $collectionName . '_' . $expr) . '_' . $i;
                 $sqlParam[$sqlParamName] = $v;
                 return $sqlParamName;
             }
@@ -178,21 +195,23 @@ class Mapper {
         $separator = $node->getAttribute('separator');
         $body .= '$' . $varLoop . '=\'\';' . PHP_EOL;
         if ($node->hasChildNodes()) {
-            $body .= '$' . $index . '=0;' . PHP_EOL;
-            $body .= 'foreach (' . Ognl::parse($collection) . ' as $' . $item . ') {' . PHP_EOL;
+            $body .= '$i=0;' . PHP_EOL;
+            $body .= 'foreach (' . Ognl::getClassName() . '::evaluate($param, \'' . $collection . '\') as $forEachIndex => $forEachItem) {' . PHP_EOL;
             $body .= '$temp=\'\';' . PHP_EOL;
-            $body .= '$temp.=($' . $index . ' > 0 ? \'' . $separator . '\' : \'\');' . PHP_EOL;
+            if (!empty($separator)) {
+                $body .= '$temp.=($i > 0 ? \'' . $this->quote($separator) . '\' : \'\');' . PHP_EOL;
+            }
             foreach ($node->childNodes as $child) {
                 $this->parseStatement($namespace, $body, $child, 'temp');
             }
-            $body .= '$' . $varLoop . '.=$this->parseForEachSql($temp, \'' . $collection . '\', $' . $index . ', [\'' . $item . '\'=>$' . $item . ',\'' . $index . '\'=>$' . $index . '], $sqlParam);' . PHP_EOL;
-            $body .= '$' . $index . '+=1;' . PHP_EOL;
+            $body .= '$' . $varLoop . '.=$this->parseForEachSql($i, $temp, \'' . $this->quote($collection) . '\', \'' . $this->quote($index) . '\', $forEachIndex, \'' . $this->quote($item) . '\', $forEachItem, $param, $sqlParam);' . PHP_EOL;
+            $body .= '$i++;' . PHP_EOL;
             $body .= '}' . PHP_EOL;
         }
         $body .= 'if (!empty($' . $varLoop . ')) {' . PHP_EOL;
-        $body .= '$' . $var . '.=\'' . $open . '\';' . PHP_EOL;
+        $body .= '$' . $var . '.=\'' . $this->quote($open) . '\';' . PHP_EOL;
         $body .= '$' . $var . '.=$' . $varLoop . ';' . PHP_EOL;
-        $body .= '$' . $var . '.=\'' . $close . '\';' . PHP_EOL;
+        $body .= '$' . $var . '.=\'' . $this->quote($close) . '\';' . PHP_EOL;
         $body .= '}' . PHP_EOL;
     }
 
@@ -338,7 +357,7 @@ class Mapper {
      * @param string $translated : translated php code
      * @return void
      */
-    private function initXml($simple_xml_dom, &$translated) {
+    public function initXml($simple_xml_dom, &$translated = '') {
         $this->statements = [
             'select' => [],
             'insert' => [],
@@ -372,8 +391,12 @@ class Mapper {
         }
         $translated = $body;
         $f = create_function('', 'return function(){' . $body . '};');
-        $c = \Closure::bind($f(), $this);
-        $c();
+        if ($f) {
+            $c = \Closure::bind($f(), $this);
+            $c();
+        } else {
+            throw new \Exception(__CLASS__ . '::initXml() failed');
+        }
     }
 
     /**
