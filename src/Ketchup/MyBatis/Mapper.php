@@ -478,7 +478,7 @@ class Mapper {
             $sqlText = $statement->parse($param, $sqlParam);
             $result = $this->getSession()->execute($sqlText, $sqlParam);
         }
-        $this->logger->debug('INSERT STATEMENT [' . $id  . '] COMPLETE', [$sqlText, $sqlParam, $param]);
+        $this->logger->debug('INSERT STATEMENT [' . $id  . '] COMPLETE', [$sqlText, $sqlParam]);
         return $result;
     }
 

@@ -79,7 +79,7 @@ class InsertStatement extends AbstractStatement {
                 $query .= $child->parse($context, $param, $bindings);
             }
         }
-        return $query;
+        return $query . ' ';
     }
 
     public function __toSource() {
