@@ -4,6 +4,22 @@ namespace Ketchup\MyBatis;
 
 use Ketchup\MyBatis\Util\Ognl;
 use Ketchup\MyBatis\SqlSession;
+use Ketchup\MyBatis\SQL\AbstractStatement;
+use Ketchup\MyBatis\SQL\ChooseStatement;
+use Ketchup\MyBatis\SQL\DeleteStatement;
+use Ketchup\MyBatis\SQL\ForEachStatement;
+use Ketchup\MyBatis\SQL\IfStatement;
+use Ketchup\MyBatis\SQL\IncludeStatement;
+use Ketchup\MyBatis\SQL\InsertStatement;
+use Ketchup\MyBatis\SQL\OtherwiseStatement;
+use Ketchup\MyBatis\SQL\SelectKeyStatement;
+use Ketchup\MyBatis\SQL\SelectStatement;
+use Ketchup\MyBatis\SQL\SetStatement;
+use Ketchup\MyBatis\SQL\SqlStatement;
+use Ketchup\MyBatis\SQL\TextStatement;
+use Ketchup\MyBatis\SQL\UpdateStatement;
+use Ketchup\MyBatis\SQL\WhenStatement;
+use Ketchup\MyBatis\SQL\WhereStatement;
 
 /**
  * php MyBatis implementation
@@ -24,10 +40,6 @@ class Mapper {
     
     /** @var array $statements : cache of select, insert, update, delete functions */
     public $statements;
-    /** @var array $resultTypes : cache of resultType */
-    public $resultTypes;
-    /** @var array $keyProperties : cache of keyProperty */
-    public $keyProperties;
 
     /**
      * constructor
@@ -70,303 +82,99 @@ class Mapper {
     }
 
     /**
-     * parse "foreach" tag and set SQL parameter
-     * @param int $i : current loop index
-     * @param string $sql : translated SQL of "foreach" tag
-     * @param string $collectionName : "collection" attribute value of "foreach" tag
-     * @param string $indexName : "index" attribute value of "foreach" tag
-     * @param mixed $index : current loop index or key
-     * @param string $itemName : "item" attribute value of "foreach" tag
-     * @param mixed $item : current loop item
-     * @param mixed $param : input parameter object
-     * @param array $sqlParam : SQL parameter
-     * @return string
+     * xml to statement
+     *
+     * @param string $namespace
+     * @param \DOMElement $elem
+     * @param AbstractStatement $parent
+     * @return AbstractStatement
      */
-    public function parseForEachSql($i, $sql, $collectionName, $indexName, $index, $itemName, $item, &$param, &$sqlParam) {
-        $sql = preg_replace_callback('/(\$|#)\{([\s\S]+?)\}/', function ($matches) use (&$i, &$collectionName, &$indexName, &$index, &$itemName, &$item, &$param, &$sqlParam) {
-            $expr = $matches[2];
-            $varPrefix = strtok(trim($expr), '.');
-            $isItemScope = (!empty($itemName) && $varPrefix == $itemName) || (!empty($indexName) && $varPrefix == $indexName);
-            if ($isItemScope) {
-                $arr = [];
-                if (!empty($itemName)) {
-                    $arr[$itemName] = $item;
-                }
-                if (!empty($indexName)) {
-                    $arr[$indexName] = $index;
-                }
-                $v = Ognl::evaluate($arr, $expr);
-            } else {
-                $v = Ognl::evaluate($param, $expr);
-            }
-            if ($matches[1] == '$') {
-                if (is_null($v)) {
-                    return 'NULL';
-                } else {
-                    return $v;
-                }
-            } else {
-                $sqlParamName = ':' . preg_replace('/[^\w_]+/', '_', $collectionName . '_' . $expr) . '_' . $i;
-                $sqlParam[$sqlParamName] = $v;
-                return $sqlParamName;
-            }
-        }, $sql);
-        return $sql;
-    }
-
-    /**
-     * parse "choose" tag to php code
-     * @param string $body : string of php function body
-     * @param DOMElement $node : "choose" node
-     * @param string $var : name of php variable
-     * @return void
-     */
-    private function parseChooseStatement($namespace, &$body, &$node, $var = '$sql') {
-        foreach ($node->getElementsByTagName('when') as $i => $child) {
-            if ($i == 0) {
-                $body .= 'if (' . Ognl::parse($child->getAttribute('test')) . ') {' . PHP_EOL;
-            } else {
-                $body .= 'else if (' . Ognl::parse($child->getAttribute('test')) . ') {' . PHP_EOL;
-            }
-            $this->parseStatement($namespace, $body, $child, $var);
-            $body .= '}' . PHP_EOL;
-        }
-        foreach ($node->getElementsByTagName('otherwise') as $i => $child) {
-            $body .= 'else {' . PHP_EOL;
-            $this->parseStatement($namespace, $body, $child, $var);
-            $body .= '}' . PHP_EOL;
-        }
-    }
-
-    /**
-     * parse "where" tag to php code
-     * @param string $body : string of php function body
-     * @param DOMElement $node : "where" node
-     * @param string $var : name of php variable
-     * @return void
-     */
-    private function parseWhereStatement($namespace, &$body, &$node, $var = '$sql') {
-        $varWhere = $var . '_where';
-        $body .= $varWhere . '=\'\';' . PHP_EOL;
-        if ($node->hasChildNodes()) {
-            foreach ($node->childNodes as $child) {
-                $this->parseStatement($namespace, $body, $child, $varWhere);
-            }
-            $body .= 'if (!empty(' . $varWhere . ')) {' . PHP_EOL;
-            $body .= $var . '.=\' where \' . preg_replace(\'/^\s?(or|and)\s+/i\', \'\', ' . $varWhere . ');' . PHP_EOL;
-            $body .= '}' . PHP_EOL;
-        }
-    }
-
-    /**
-     * parse "set" tag to php code
-     * @param string $body : string of php function body
-     * @param DOMElement $node : "set" node
-     * @param string $var : name of php variable
-     * @return void
-     */
-    private function parseSetStatement($namespace, &$body, &$node, $var = '$sql') {
-        $varSet = $var . '_set';
-        $body .= $varSet . '=\'\';' . PHP_EOL;
-        if ($node->hasChildNodes()) {
-            foreach ($node->childNodes as $child) {
-                $this->parseStatement($namespace, $body, $child, $varSet);
-            }
-            $body .= 'if (!empty(' . $varSet . ')) {' . PHP_EOL;
-            $body .= $var . '.=\' set \' . preg_replace(\'/^\s?,\s?|\s?,\s?$/\', \'\', ' . $varSet . ');' . PHP_EOL;
-            $body .= '}' . PHP_EOL;
-        }
-    }
-
-    /**
-     * parse "foreach" tag to php code
-     * @param string $body : string of php function body
-     * @param DOMElement $node : "foreach" node
-     * @param string $var : name of php variable
-     * @return void
-     */
-    private function parseForEachStatement($namespace, &$body, &$node, $var = '$sql') {
-        $varLoop = $var . '_loop';
-        $collection = $node->getAttribute('collection');
-        $item = $node->getAttribute('item');
-        $index = $node->getAttribute('index');
-        $open = $node->getAttribute('open');
-        $close = $node->getAttribute('close');
-        $separator = $node->getAttribute('separator');
-        $body .= $varLoop . '=\'\';' . PHP_EOL;
-        if ($node->hasChildNodes()) {
-            $body .= '$i=0;' . PHP_EOL;
-            $body .= 'foreach (' . Ognl::getClassName() . '::evaluate($param, \'' . $collection . '\') as $forEachIndex => $forEachItem) {' . PHP_EOL;
-            $body .= '$temp=\'\';' . PHP_EOL;
-            if (!empty($separator)) {
-                $body .= '$temp.=($i > 0 ? \'' . $this->quote($separator) . '\' : \'\');' . PHP_EOL;
-            }
-            foreach ($node->childNodes as $child) {
-                $this->parseStatement($namespace, $body, $child, '$temp');
-            }
-            $body .= $varLoop . '.=$this->parseForEachSql($i, $temp, \'' . $this->quote($collection) . '\', \'' . $this->quote($index) . '\', $forEachIndex, \'' . $this->quote($item) . '\', $forEachItem, $param, $sqlParam);' . PHP_EOL;
-            $body .= '$i++;' . PHP_EOL;
-            $body .= '}' . PHP_EOL;
-        }
-        $body .= 'if (!empty(' . $varLoop . ')) {' . PHP_EOL;
-        $body .= $var . '.=\'' . $this->quote($open) . '\';' . PHP_EOL;
-        $body .= $var . '.=' . $varLoop . ';' . PHP_EOL;
-        $body .= $var . '.=\'' . $this->quote($close) . '\';' . PHP_EOL;
-        $body .= '}' . PHP_EOL;
-    }
-
-    /**
-     * escape single quote
-     * @param string $text : php code
-     * @return string
-     */
-    private function quote($text) {
-        return preg_replace('/\'/', '\\\'', $text);
-    }
-
-    /**
-     * parse node to php
-     * @param string $body : string of php function body
-     * @param DOMElement $node : node
-     * @param string $var : name of php variable
-     * @return void
-     */
-    private function parseStatement($namespace, &$body, &$node, $var = '$sql') {
-        switch ($node->nodeType) {
+    function parseXml($namespace = '', $elem, $parent = NULL) {
+        $current = NULL;
+        switch ($elem->nodeType) {
             case XML_TEXT_NODE:
             case XML_CDATA_SECTION_NODE:
-                $sql = trim($node->textContent);
-                if ($sql) {
-                    $body .= $var . '.=\' ' . $this->quote($sql) . ' \';' . PHP_EOL;
+                $text = trim($elem->textContent);
+                if ($text) {
+                    $current = new TextStatement($text);
+                    if ($parent) {
+                        $parent->append($current);
+                    }
                 }
-                return;
+                return $current;
         }
-
-        $nodeName = $node->nodeName;
+        $nodeName = $elem->nodeName;
         switch ($nodeName) {
-            case 'include':
-                $this->parseStatement($namespace, $body, $this->partialSql[$namespace . $node->getAttribute('refid')], $var);
-                return;
-            case 'choose':
-                $this->parseChooseStatement($namespace, $body, $node, $var);
-                return;
-            case 'where':
-                $this->parseWhereStatement($namespace, $body, $node, $var);
-                return;
-            case 'set':
-                $this->parseSetStatement($namespace, $body, $node, $var);
-                return;
-            case 'foreach':
-                $this->parseForEachStatement($namespace, $body, $node, $var);
-                return;
+            case 'sql':
+                $current = new SqlStatement($namespace . $elem->getAttribute('id'));
+                break;
             case 'selectKey':
-                return;
+                $current = new SelectKeyStatement($elem->getAttribute('keyProperty'), $elem->getAttribute('order'), $elem->getAttribute('resultType'));
+                break;
+            case 'include':
+                $current = new IncludeStatement($namespace . $elem->getAttribute('refid'));
+                break;
+            case 'select':
+                $current = new SelectStatement($namespace . $elem->getAttribute('id'), $elem->getAttribute('resultType'));
+                break;
+            case 'insert':
+                $current = new InsertStatement($namespace . $elem->getAttribute('id'), $elem->getAttribute('useGeneratedKeys'), $elem->getAttribute('keyProperty'));
+                break;
+            case 'update':
+                $current = new UpdateStatement($namespace . $elem->getAttribute('id'));
+                break;
+            case 'delete':
+                $current = new DeleteStatement($namespace . $elem->getAttribute('id'));
+                break;
+            case 'foreach':
+                $current = new ForEachStatement($elem->getAttribute('collection'), $elem->getAttribute('item'), $elem->getAttribute('index'), $elem->getAttribute('open'), $elem->getAttribute('close'), $elem->getAttribute('separator'));
+                break;
+            case 'choose':
+                $current = new ChooseStatement();
+                break;
+            case 'when':
+                $current = new WhenStatement($elem->getAttribute('test'));
+                break;
+            case 'otherwise':
+                $current = new OtherwiseStatement();
+                break;
             case 'if':
-                $body .= 'if (' . Ognl::parse($node->getAttribute('test')) . ') {' . PHP_EOL;
+                $current = new IfStatement($elem->getAttribute('test'));
+                break;
+            case 'set':
+                $current = new SetStatement();
+                break;
+            case 'where':
+                $current = new WhereStatement();
                 break;
         }
-
-        if ($node->hasChildNodes()) {
-            foreach ($node->childNodes as $child) {
-                $this->parseStatement($namespace, $body, $child, $var);
+        if ($current) {
+            if ($parent) {
+                $parent->append($current);
             }
-        }
-
-        switch ($nodeName) {
-            case 'if':
-                $body .= '}' . PHP_EOL;
-                break;
-        }
-    }
-
-    /**
-     * parse "selectKey" tag to php
-     * @param DOMElement $node : "selectKey" node
-     * @param string $body : string php function body
-     * @param string $id : id attribute of insert node
-     * @return void
-     */
-    private function parseSelectKeyNode(&$node, &$body, $id) {
-        $keyProperty = $node->getAttribute('keyProperty');
-        $resultType = $node->getAttribute('resultType');
-        $order = strtolower($node->getAttribute('order'));
-        $selectKeyId = $id . '-' . $order;
-        $this->resultTypes[$selectKeyId] = $resultType;
-        $this->keyProperties[$id] = $keyProperty;
-        $body .= '$this->addStatement(\'selectKey\', \'' . $selectKeyId . '\', function (&$param, &$sqlParam) {' . PHP_EOL;
-        $body .= '$sql=\'\';' . PHP_EOL;
-        if ($node->hasChildNodes()) {
-            foreach ($node->childNodes as $child) {
-                $this->parseStatement($body, $child, 'sql');
-            }
-        }
-        $body .= 'return $sql;' . PHP_EOL;
-        $body .= '});' . PHP_EOL;
-    }
-
-    /**
-     * parse "select", "insert", "update", "delete" tag to php function
-     * @param DOMElement $node : node
-     * @param string $body : string of php function body
-     * @return void
-     */
-    private function parseSqlNode($namespace, $node, &$body) {
-        $category = $node->tagName;
-        $id = $namespace . $node->getAttribute('id');
-        $resultType = $node->getAttribute('resultType');
-        if ($category == 'insert') {
-            if ($node->getAttribute('useGeneratedKeys') === 'true') {
-                $keyProperty = $node->getAttribute('keyProperty');
-                if ($keyProperty) {
-                    $this->keyProperties[$id] = $keyProperty;
-                }
-            }
-            else {
-                $selectKey = $node->getElementsByTagName('selectKey');
-                if ($selectKey->length > 0) {
-                    $selectKeyNode = $selectKey->item(0);
-                    $this->parseSelectKeyNode($selectKeyNode, $body, $id);
+            if ($elem->hasChildNodes()) {
+                foreach ($elem->childNodes as $child) {
+                    $this->parseXml($namespace, $child, $current);
                 }
             }
         }
-        $this->resultTypes[$id] = $resultType;
-        $body .= '$this->addStatement(\'' . $category . '\', \'' . $id . '\', function (&$param, &$sqlParam) {' . PHP_EOL;
-        $body .= '$sql=\'\';' . PHP_EOL;
-        $this->parseStatement($namespace, $body, $node);
-        $body .= 'return $sql;' . PHP_EOL;
-        $body .= '});' . PHP_EOL;
+        return $current;
     }
 
     /**
-     * import "select", "insert", "update", "delete" functions
-     * (calling from cached php file)
-     * @internal
-     * @param string $category : select, insert, update, delete
-     * @param string $id : id of SQL
-     * @param Closure $func : php function
+     * initialize mapper xml dom
+     *
+     * @param DOMDocument $simple_xml_dom
      * @return void
      */
-    public function addStatement($category, $id, $func) {
-        $this->statements[$category][$id] = $func;
-        $this->logger->debug(strtoupper($category) . ' STATEMENT [' . $id . '] ADD COMPLETE');
-    }
-
-    /**
-     * initialize "mapper" from simple xml dom
-     * @param string $simple_xml_dom : xml dom of "mapper"
-     * @param string $translated : translated php code
-     * @return void
-     */
-    public function initXml($simple_xml_dom, &$translated = '') {
+    public function initXml($simple_xml_dom) {
         $this->statements = [
+            'sql' => [],
             'select' => [],
             'insert' => [],
             'update' => [],
-            'delete' => [],
-            'selectKey' => []
+            'delete' => []
         ];
-        $this->resultTypes = [];
-        $this->partialSql = [];
 
         $root = dom_import_simplexml($simple_xml_dom);
         $namespace = trim($root->getAttribute('namespace'));
@@ -374,25 +182,30 @@ class Mapper {
             $namespace .= '.';
         }
         foreach ($root->getElementsByTagName('sql') as $node) {
-            $this->partialSql[$namespace . $node->getAttribute('id')] = $node;
+            $statement = $this->parseXml($namespace, $node);
+            $statement->setMapper($this);
+            $this->statements['sql'][$statement->getId()] = $statement;
         }
-        $body = '';
         foreach ($root->getElementsByTagName('select') as $node) {
-            $this->parseSqlNode($namespace, $node, $body);
+            $statement = $this->parseXml($namespace, $node);
+            $statement->setMapper($this);
+            $this->statements['select'][$statement->getId()] = $statement;
         }
         foreach ($root->getElementsByTagName('insert') as $node) {
-            $this->parseSqlNode($namespace, $node, $body);
+            $statement = $this->parseXml($namespace, $node);
+            $statement->setMapper($this);
+            $this->statements['insert'][$statement->getId()] = $statement;
         }
         foreach ($root->getElementsByTagName('update') as $node) {
-            $this->parseSqlNode($namespace, $node, $body);
+            $statement = $this->parseXml($namespace, $node);
+            $statement->setMapper($this);
+            $this->statements['update'][$statement->getId()] = $statement;
         }
         foreach ($root->getElementsByTagName('delete') as $node) {
-            $this->parseSqlNode($namespace, $node, $body);
+            $statement = $this->parseXml($namespace, $node);
+            $statement->setMapper($this);
+            $this->statements['delete'][$statement->getId()] = $statement;
         }
-        $translated = $body;
-        $f = create_function('', 'return function(){' . $body . '};');
-        $c = \Closure::bind($f(), $this);
-        $c();
     }
 
     /**
@@ -429,20 +242,21 @@ class Mapper {
             $this->logger->debug('INIT MAPPER COMPLETE FROM CACHE');
             return $this;
         }
-        $this->initXml(simplexml_load_file($mapper_xml_path), $translated);
+        $this->initXml(simplexml_load_file($mapper_xml_path));
         if ($cache_path) {
             foreach (glob($cache_prefix . '*.php') as $cache_file) {
                 @unlink($cache_file);
             }
             $cache = fopen($cache_path, 'w');
             if ($cache) {
-                fwrite($cache,
-                    '<' . '?php' . PHP_EOL .
-                    $translated . PHP_EOL .
-                    '$this->resultTypes = ' . var_export($this->resultTypes, TRUE) . ';' . PHP_EOL .
-                    '$this->keyProperties = ' . var_export($this->keyProperties, TRUE) . ';' . PHP_EOL .
-                    '?' . '>'
-                );
+                fwrite($cache, '<' . '?php' . PHP_EOL);
+                foreach ($this->statements as $k => &$statements) {
+                    foreach ($statements as &$statement) {
+                        fwrite($cache, '$this->statements["' . $k . '"]["' . $statement->getId() . '"]=' . $statement->__toSource() . ';' . PHP_EOL);
+                        fwrite($cache, '$this->statements["' . $k . '"]["' . $statement->getId() . '"]->setMapper($this);' . PHP_EOL);
+                    }
+                }
+                fwrite($cache, '?' . '>');
                 fclose($cache);
             } else {
                 $this->logger->warning('WRITE MAPPER CACHE FAILED');
@@ -495,53 +309,17 @@ class Mapper {
     }
 
     /**
-     * get plain SQL text of given id
-     * @param string $category : select, insert, update, delete
-     * @param string $id : id of mapper xml node
-     * @param array|object $param : input parameter
-     * @param array $sqlParam : SQL parameter
-     * @return string
+     * get statement object
+     *
+     * @param string $category
+     * @param string $id
+     * @return AbstractStatement
      */
-    public function getSql($category, $id, $param = NULL, &$sqlParam = NULL) {
+    public function getStatement($category, $id) {
         if (!isset($this->statements[$category][$id])) {
             throw new \Exception('Undefined index in mapper::statements[' . $category . '][' . $id . ']');
         }
-        $func = $this->statements[$category][$id];
-        $sqlParam = [];
-        $sql = trim($func($param, $sqlParam));
-        return $this->getSqlText($sql, $param, $sqlParam);
-    }
-
-    /**
-     * get plain SQL text from prepared SQL
-     * change "#{}", "${}" to SQL parameter
-     * @param string $sql : prepared SQL
-     * @param array|object $param : input parameter
-     * @param array $sqlParam : SQL parameter
-     * @return string
-     */
-    private function getSqlText($sql, &$param, &$sqlParam) {
-        $sqlText = preg_replace_callback('/(\$|#)\{\s*([.\s\S]+?)\s*\}/', function ($matches) use (&$param, &$sqlParam) {
-            $prefix = $matches[1];
-            $expr = $matches[2];
-            $name = trim(preg_replace('/[^\w]/', '_', $expr), '_');
-            if (is_scalar($param)) {
-                $v = $param;
-            } else {
-                $v = Ognl::evaluate($param, $expr);
-            }
-            if ($prefix == '$') {
-                if (is_null($v)) {
-                    return 'NULL';
-                } else {
-                    return $v;
-                }
-            } else {
-                $sqlParam[':' . $name] = $v;
-                return ':' . $name;
-            }
-        }, $sql);
-        return $sqlText;
+        return $this->statements[$category][$id];
     }
 
     /**
@@ -576,8 +354,10 @@ class Mapper {
      */
     public function select($id, $param = NULL) {
         $this->logger->debug('SELECT STATEMENT [' . $id  . '] START', [$param]);
-        $sqlText = $this->getSql('select', $id, $param, $sqlParam);
-        $resultType = $this->resultTypes[$id];
+        $statement = $this->getStatement('select', $id);
+        $sqlParam = [];
+        $sqlText = $statement->parse($param, $sqlParam);
+        $resultType = $statement->getAttribute('resultType');
         $result = NULL;
         switch (strtolower($resultType)) {
             case 'bool':
@@ -611,8 +391,10 @@ class Mapper {
      */
     public function selectOne($id, $param = NULL) {
         $this->logger->debug('SELECT STATEMENT [' . $id . '] START', [$param]);
-        $sqlText = $this->getSql('select', $id, $param, $sqlParam);
-        $resultType = $this->resultTypes[$id];
+        $statement = $this->getStatement('select', $id);
+        $sqlParam = [];
+        $sqlText = $statement->parse($param, $sqlParam);
+        $resultType = $statement->getAttribute('resultType');
         $result = NULL;
         switch (strtolower($resultType)) {
             case 'bool':
@@ -640,68 +422,77 @@ class Mapper {
      * execute "insert"
      * @param string $id : id of "insert"
      * @param array|object $param : input parameter
-     * @return void
+     * @return boolean
      */
     public function insert($id, $param = NULL) {
         $this->logger->debug('INSERT STATEMENT [' . $id . '] START', [$param]);
-        //insert 태그에 selectKey[order="before"] 가 있는 경우
-        if (isset($this->statements['selectKey'][$id . '-before'])) {
-            $selectKeyId = $id . '-before';
-            $sqlSelectKeyText = $this->getSql('selectKey', $selectKeyId, $param, $sqlKeyParam);
-            $lastInsertId = $this->getSession()->queryValue($sqlSelectKeyText, $sqlKeyParam);
-            $keyProp = $this->keyProperties[$id];
-            $resultType = $this->resultTypes[$selectKeyId];
-            if (is_array($param)) {
-                $param[$keyProp] = $this->_converTo($lastInsertId, $resultType);
-            } else if (is_object($param)) {
-                $param->{$keyProp} = $this->_converTo($lastInsertId, $resultType);
+        $statement = $this->getStatement('insert', $id);
+        /** @var SelectKeyStatement $selectKey */
+        $selectKey = $statement->getSelectKey();
+        if ($selectKey) {
+            if ($selectKey->getAttribute('order') == 'before') {
+                $sqlParam = [];
+                $sqlText = $selectKey->parse($param, $sqlParam);
+                $lastInsertId = $this->getSession()->queryValue($sqlText, $sqlParam);
+                $keyProperty = $selectKey->getAttribute('keyProperty');
+                $resultType = $selectKey->getAttribute('resultType');
+                if (is_array($param)) {
+                    $param[$keyProperty] = $this->_convertTo($lastInsertId, $resultType);
+                } else if (is_object($param)) {
+                    $param->{$keyProperty} = $this->_converTo($lastInsertId, $resultType);
+                }
+                $sqlParam = [];
+                $sqlText = $statement->parse($param, $sqlParam);
+                $result = $this->getSession()->execute($sqlText, $sqlParam);
             }
-            $sqlText = $this->getSql('insert', $id, $param, $sqlParam);
-            $this->getSession()->execute($sqlText, $sqlParam);
-        }
-        //insert 태그에 selectKey[order="after"] 가 있는 경우
-        else if (isset($this->statements['selectKey'][$id . '-after'])) {
-            $sqlText = $this->getSql('insert', $id, $param, $sqlParam);
-            $this->getSession()->execute($sqlText, $sqlParam);
-            $selectKeyId = $id . '-after';
-            $sqlSelectKeyText = $this->getSql('selectKey', $selectKeyId, $param, $sqlKeyParam);
-            $lastInsertId = $this->getSession()->queryValue($sqlSelectKeyText, $sqlKeyParam);
-            $keyProp = $this->keyProperties[$id];
-            $resultType = $this->resultTypes[$selectKeyId];
-            if (is_array($param)) {
-                $param[$keyProp] = $this->_converTo($lastInsertId, $resultType);
-            } else if (is_object($param)) {
-                $param->{$keyProp} = $this->_converTo($lastInsertId, $resultType);
+            else if ($selecKey->getAttribute('order') == 'after') {
+                $sqlParam = [];
+                $sqlText = $statement->parse($param, $sqlParam);
+                $result = $this->getSession()->execute($sqlText, $sqlParam);
+                $sqlParam = [];
+                $sqlText = $selectKey->parse($param, $sqlParam);
+                $lastInsertId = $this->getSession()->queryValue($sqlText, $sqlParam);
+                $keyProperty = $selectKey->getAttribute('keyProperty');
+                $resultType = $selectKey->getAttribute('resultType');
+                if (is_array($param)) {
+                    $param[$keyProperty] = $this->_convertTo($lastInsertId, $resultType);
+                } else if (is_object($param)) {
+                    $param->{$keyProperty} = $this->_converTo($lastInsertId, $resultType);
+                }
             }
         }
         //insert 태그에 useGeneratedKeys 가 true 인 경우
-        else if (isset($this->keyProperties[$id])) {
-            $sqlText = $this->getSql('insert', $id, $param, $sqlParam);
-            $this->getSession()->execute($sqlText, $sqlParam);
+        else if ($statement->getAttribute('useGeneratedKeys') === 'true') {
+            $sqlParam = [];
+            $sqlText = $statement->parse($param, $sqlParam);
+            $result = $this->getSession()->execute($sqlText, $sqlParam);
             $lastInsertId = $this->getSession()->getLastInsertId();
-            $keyProp = $this->keyProperties[$id];
+            $keyProperty = $statement->getAttribute('keyProperty');
             if (is_array($param)) {
-                $param[$keyProp] = $lastInsertId;
+                $param[$keyProperty] = $lastInsertId;
             } else if (is_object($param)) {
-                $param->{$keyProp} = $lastInsertId;
+                $param->{$keyProperty} = $lastInsertId;
             }
         }
         else {
-            $sqlText = $this->getSql('insert', $id, $param, $sqlParam);
-            $this->getSession()->execute($sqlText, $sqlParam);
+            $sqlText = $statement->parse($param, $sqlParam);
+            $result = $this->getSession()->execute($sqlText, $sqlParam);
         }
         $this->logger->debug('INSERT STATEMENT [' . $id  . '] COMPLETE', [$sqlText, $sqlParam, $param]);
+        return $result;
     }
 
     /**
      * execute "update"
      * @param string $id : id of "update"
      * @param array|object $param : input parameter
-     * @return void
+     * @return boolean
      */
     public function update($id, $param = NULL) {
         $this->logger->debug('UPDATE STATEMENT [' . $id . '] START', [$param]);
-        $sqlText = $this->getSql('update', $id, $param, $sqlParam);
+        $statement = $this->getStatement('update', $id);
+        $sqlParam = [];
+        $sqlText = $statement->parse($param, $sqlParam);
         $result = $this->getSession()->execute($sqlText, $sqlParam);
         $this->logger->debug('UPDATE STATEMENT [' . $id  . '] COMPLETE', [$sqlText, $sqlParam]);
         return $result;
@@ -711,11 +502,13 @@ class Mapper {
      * execute "delete"
      * @param string $id : id of "delete"
      * @param array|object $param : input parameter
-     * @return void
+     * @return boolean
      */
     public function delete($id, $param = NULL) {
         $this->logger->debug('DELETE STATEMENT [' . $id . '] START', [$param]);
-        $sqlText = $this->getSql('delete', $id, $param, $sqlParam);
+        $statement = $this->getStatement('update', $id);
+        $sqlParam = [];
+        $sqlText = $statement->parse($param, $sqlParam);
         $result = $this->getSession()->execute($sqlText, $sqlParam);
         $this->logger->debug('DELETE STATEMENT [' . $id  . '] COMPLETE', [$sqlText, $sqlParam]);
         return $result;

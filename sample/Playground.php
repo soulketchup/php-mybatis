@@ -81,9 +81,9 @@ function resultText() {
     $model = json_decode($param);
     $mapper = Mapper::instance();
     try {
-        $mapper->initXml($dom, $code);
+        $mapper->initXml($dom);
     } catch (\Exception $e) {
-        return '[xml parsing error]' . PHP_EOL . $code;
+        return '[xml parsing error]' . PHP_EOL;
     }
     $arr = [
         '[parameter object]',
@@ -92,13 +92,16 @@ function resultText() {
     foreach ($mapper->statements as $category => $statements) {
         foreach (array_keys($statements) as $id) {
             $arr[] = '[(' . $category . ') ' . $id . ']';
-            $sql = $mapper->getSql($category, $id, $model, $sqlParam);
+            $sqlParam = [];
+            $statement = $mapper->getStatement($category, $id);
+            $sql = $statement->parse($model, $sqlParam);
             $arr[] = $sql;
             $arr[] = print_r($sqlParam, TRUE);
+            $arr[] = '[source]';
+            $arr[] = $statement->__toSource();
+            $arr[] = '';
         }
     }
-    $arr[] = '[mapper xml to php code]';
-    $arr[] = $code;
     return implode(PHP_EOL, $arr);
 }
 
