@@ -32,7 +32,6 @@ tested database vendor - mysql 5.x
   - where
   - set
   - foreach[@item][@index][@collection][@open][@separator][@close]
-> Nested foreach not supported yet.
 
 # Available OGNL Expressions
 | input parameter | expression | equivalent | remark |
