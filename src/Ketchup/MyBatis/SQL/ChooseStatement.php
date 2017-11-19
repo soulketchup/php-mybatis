@@ -28,13 +28,13 @@ class ChooseStatement extends AbstractStatement {
      * @return void
      */
     public function append($child) {
-        $this->children[] = $child;
         $childName = $child->getName();
         if ($childName == 'when') {
             $this->when[] = $child;
         } else if ($childName == 'otherwise') {
             $this->otherwise[] = $child;
         }
+        parent::append($child);
     }
 
     /**
