@@ -46,6 +46,13 @@ class Mapper {
      */
     public function __construct() {
         $this->logger = new \Psr\Log\NullLogger();
+        $this->statements = [
+            'sql' => [],
+            'select' => [],
+            'insert' => [],
+            'update' => [],
+            'delete' => []
+        ];
     }
 
     /**
@@ -209,13 +216,6 @@ class Mapper {
      * @return Mapper
      */
     public function setConnection($dbConfig) {
-        $this->statements = [
-            'sql' => [],
-            'select' => [],
-            'insert' => [],
-            'update' => [],
-            'delete' => []
-        ];
         $this->dbConfig = $dbConfig;
         $this->destroySession();
         return $this;
@@ -279,7 +279,7 @@ class Mapper {
             'update' => [],
             'delete' => []
         ];
-                
+
         $sqlMapDir = dirname(realpath($config_xml_path));
         $sqlMapConfig = simplexml_load_file($config_xml_path);
 
