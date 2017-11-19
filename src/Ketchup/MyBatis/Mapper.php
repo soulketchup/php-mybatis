@@ -168,14 +168,6 @@ class Mapper {
      * @return void
      */
     public function initXml($simple_xml_dom) {
-        $this->statements = [
-            'sql' => [],
-            'select' => [],
-            'insert' => [],
-            'update' => [],
-            'delete' => []
-        ];
-
         $root = dom_import_simplexml($simple_xml_dom);
         $namespace = trim($root->getAttribute('namespace'));
         if ($namespace) {
@@ -217,6 +209,13 @@ class Mapper {
      * @return Mapper
      */
     public function setConnection($dbConfig) {
+        $this->statements = [
+            'sql' => [],
+            'select' => [],
+            'insert' => [],
+            'update' => [],
+            'delete' => []
+        ];
         $this->dbConfig = $dbConfig;
         $this->destroySession();
         return $this;
@@ -273,6 +272,14 @@ class Mapper {
      * @return Mapper
      */
     public function init($config_xml_path, $cache_dir = NULL) {
+        $this->statements = [
+            'sql' => [],
+            'select' => [],
+            'insert' => [],
+            'update' => [],
+            'delete' => []
+        ];
+                
         $sqlMapDir = dirname(realpath($config_xml_path));
         $sqlMapConfig = simplexml_load_file($config_xml_path);
 

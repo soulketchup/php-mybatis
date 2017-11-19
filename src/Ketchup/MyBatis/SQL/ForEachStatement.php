@@ -68,22 +68,7 @@ class ForEachStatement extends AbstractStatement {
         $open = $this->open;
         $close = $this->close;
         $separator = $this->separator;
-        if ($open) {
-            $open = ' ' . $open;
-        }
-        if ($close) {
-            $close = $close . ' ';
-        }
-        if ($separator) {
-            $separator = ' ' . $separator . ' ';
-        }
-        $expr = $this->collection;
-        $token1 = strtok($expr, '.');
-        if (isset($bindings[$token1])) {
-            $list = Ognl::evaluate($bindings, $expr);
-        } else {
-            $list = Ognl::evaluate($context, $expr);
-        }
+        $list = $this->parseExpression($this->collection, $context, $bindings);
         foreach ($list as $k => &$v) {
             $query2 = [];
             if ($this->item) {
@@ -95,9 +80,15 @@ class ForEachStatement extends AbstractStatement {
             foreach ($this->children as $child) {
                 $query2[] = $child->parse($context, $param, $bindings);
             }
+            if ($this->item) {
+                unset($bindings[$this->item]);
+            }
+            if ($this->index) {
+                unset($bindings[$this->index]);
+            }
             $query[] = implode('', $query2);
         }
-        return $open . implode($separator, $query) . $close;
+        return $open . implode($separator, $query) . $close . ' ';
     }
 
     public function __toSource() {

@@ -52,7 +52,7 @@ class TextStatement extends AbstractStatement {
                 return $paramName;
             }
         }, $this->sqlText);
-        return $query . ' ';
+        return trim($query) . ' ';
     }
 
     public function __toSource() {

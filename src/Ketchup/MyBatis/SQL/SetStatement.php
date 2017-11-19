@@ -31,7 +31,7 @@ class SetStatement extends AbstractStatement {
         foreach ($this->children as $child) {
             $query .= $child->parse($context, $param, $bindings);
         }
-        return ' set ' . preg_replace('/^\s*,|,\s*$/', ' ', $query);
+        return 'set ' . trim($query, ', ') . ' ';
     }
 
     public function __toSource() {

@@ -33,9 +33,8 @@ class WhereStatement extends AbstractStatement {
         foreach ($this->children as $child) {
             $query .= $child->parse($context, $param, $bindings);
         }
-        $query = trim($query);
         if ($query) {
-            $query = ' where ' . preg_replace('/^\s*(or|and)\s+/i', ' ', $query . ' ');
+            $query = 'where ' . preg_replace('/^\s*(or|and)\s+/i', ' ', $query);
         }
         return $query;
     }
