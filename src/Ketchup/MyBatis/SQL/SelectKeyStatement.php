@@ -2,13 +2,13 @@
 
 namespace Ketchup\MyBatis\SQL;
 
-use Ketchup\MyBatis\SQL\SelectStatement;
-
 /**
  * selectKey
  */
-class SelectKeyStatement extends SelectStatement {
+class SelectKeyStatement extends AbstractStatement {
     
+    /** @var string $resultType : "resultType" attribute */
+    protected $resultType;
     /** @var string $order : "order" attribute */
     protected $order = '';
     /** @var string $keyProperty : "keyProperty" attribute */
@@ -25,9 +25,11 @@ class SelectKeyStatement extends SelectStatement {
     public function __construct($keyProperty = '', $order = '', $resultType = '', $children = NULL) {
         $this->keyProperty = $keyProperty;
         $this->order = $order;
+        $this->resultType = $resultType;
         $this->attributes['keyProperty'] = $this->keyProperty;
         $this->attributes['order'] = strtolower($this->order);
-        parent::__construct($children, $resultType);
+        $this->attributes['resultType'] = $this->resultType;
+        parent::__construct($children);
     }
 
     /**
