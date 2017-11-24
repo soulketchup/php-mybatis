@@ -452,7 +452,7 @@ class Mapper {
                 $sqlText = $statement->parse($param, $sqlParam);
                 $result = $this->getSession()->execute($sqlText, $sqlParam);
             }
-            else if ($selecKey->getAttribute('order') == 'after') {
+            else if ($selectKey->getAttribute('order') == 'after') {
                 $sqlParam = [];
                 $sqlText = $statement->parse($param, $sqlParam);
                 $result = $this->getSession()->execute($sqlText, $sqlParam);

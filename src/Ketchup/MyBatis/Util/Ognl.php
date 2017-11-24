@@ -19,7 +19,7 @@ class Ognl {
 	const CONSTANT = 'constant';
 
 	/** @var string $globalFunctions : global functions */
-	private static $globalFunctionPattern = '/^(empty|count|strlen|mb_strlen)$/';
+	public static $globalFunctionPattern = '/^(empty|count|strlen|mb_strlen)$/';
 	
 	/** @var array $exprCache : cache of code */
 	private static $exprCache;
