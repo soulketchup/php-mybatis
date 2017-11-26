@@ -48,7 +48,11 @@ class TextStatement extends AbstractStatement {
                 return is_null($v) ? 'NULL' : strval($v);
             } else {
                 $paramName = $this->makeSqlParamName($expr);
-                $param[$paramName] = $v;
+                if ($paramName === '?') {
+                    $param[] = $v;
+                } else {
+                    $param[$paramName] = $v;
+                }
                 return $paramName;
             }
         }, $this->sqlText);

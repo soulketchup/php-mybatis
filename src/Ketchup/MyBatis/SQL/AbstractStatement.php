@@ -2,7 +2,7 @@
 
 namespace Ketchup\MyBatis\SQL;
 
-use Ketchup\MyBatis\Mapper;
+use Ketchup\MyBatis\SqlMap;
 use Ketchup\MyBatis\Util\Ognl;
 
 /**
@@ -22,8 +22,10 @@ abstract class AbstractStatement {
     protected $paramIndex = 0;
     /** @var array $attributes : attributes */
     protected $attributes = [];
-    /** @var Mapper $mapper */
-    protected $mapper = NULL;
+    /** @var SqlMap $sqlmap */
+    protected $sqlmap = NULL;
+    /** @var string $prefix : sql parameter prefix */
+    protected $prefix = '';
 
     /**
      * constructor
@@ -39,15 +41,16 @@ abstract class AbstractStatement {
     }
 
     /**
-     * set mapper of this statement
+     * set sqlmap of this statement
      *
-     * @param Mapper $mapper
+     * @param SqlMap $sqlmap
      * @return void
      */
-    public function setMapper(&$mapper) {
-        $this->mapper = $mapper;
+    public function setSqlMap(&$sqlmap) {
+        $this->sqlmap = $sqlmap;
+        $this->prefix = $sqlmap->getNamedParameterPrefix();
         foreach ($this->children as $child) {
-            $child->setMapper($mapper);
+            $child->setSqlMap($sqlmap);
         }
     }
 
@@ -68,27 +71,7 @@ abstract class AbstractStatement {
      * @return void
      */
     public function append($child) {
-        $child->setParent($this);
         $this->children[] = $child;
-    }
-
-    /**
-     * set $this->parent with givent AbstractStatement
-     *
-     * @param AbstractStatement $parent
-     * @return void
-     */
-    public function setParent($parent) {
-        $this->parent = $parent;
-    }
-
-    /**
-     * get $this->parent
-     *
-     * @return AbstractStatement
-     */
-    public function getParent() {
-        return $this->parent;
     }
 
     /**
@@ -116,7 +99,13 @@ abstract class AbstractStatement {
      * @return string
      */
     public function makeSqlParamName($expr) {
-        return ':' . preg_replace('/[^\w]/', '_', $expr) . '_' . ($this->paramIndex++);
+        if (empty($this->prefix)) {
+            return '?';
+        } else if ($this->prefix === '?') {
+            return $this->prefix;
+        } else {
+            return $this->prefix . preg_replace('/[^\w]/', '_', $expr) . '_' . ($this->paramIndex++);
+        }
     }
 
     /**

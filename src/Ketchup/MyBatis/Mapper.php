@@ -4,22 +4,13 @@ namespace Ketchup\MyBatis;
 
 use Ketchup\MyBatis\Util\Ognl;
 use Ketchup\MyBatis\SqlSession;
+use Ketchup\MyBatis\SqlMap;
 use Ketchup\MyBatis\SQL\AbstractStatement;
-use Ketchup\MyBatis\SQL\ChooseStatement;
-use Ketchup\MyBatis\SQL\DeleteStatement;
-use Ketchup\MyBatis\SQL\ForEachStatement;
-use Ketchup\MyBatis\SQL\IfStatement;
-use Ketchup\MyBatis\SQL\IncludeStatement;
 use Ketchup\MyBatis\SQL\InsertStatement;
-use Ketchup\MyBatis\SQL\OtherwiseStatement;
 use Ketchup\MyBatis\SQL\SelectKeyStatement;
 use Ketchup\MyBatis\SQL\SelectStatement;
-use Ketchup\MyBatis\SQL\SetStatement;
-use Ketchup\MyBatis\SQL\SqlStatement;
-use Ketchup\MyBatis\SQL\TextStatement;
 use Ketchup\MyBatis\SQL\UpdateStatement;
-use Ketchup\MyBatis\SQL\WhenStatement;
-use Ketchup\MyBatis\SQL\WhereStatement;
+use Ketchup\MyBatis\SQL\DeleteStatement;
 
 /**
  * php MyBatis implementation
@@ -31,28 +22,19 @@ class Mapper {
     /** @var Mapper $instance : singleton instance */
     private static $instance;
 
-    /** @var array $partialSql : cache of partial sql */
-    private $partialSql;
     /** @var SqlSession $dbSession */
     private $dbSession;
     /** @var array $dbConfig */
     private $dbConfig;
+    /** @var SqlMap */
+    private $sqlMap;
     
-    /** @var array $statements : cache of select, insert, update, delete functions */
-    public $statements;
-
     /**
      * constructor
      */
     public function __construct() {
         $this->logger = new \Psr\Log\NullLogger();
-        $this->statements = [
-            'sql' => [],
-            'select' => [],
-            'insert' => [],
-            'update' => [],
-            'delete' => []
-        ];
+        $this->sqlMap = new SqlMap();
     }
 
     /**
@@ -64,6 +46,14 @@ class Mapper {
             self::$instance = new self();
         }
         return self::$instance;
+    }
+
+    /**
+     * get SqlMap instance
+     * @return SqlMap
+     */
+    public function getMap() {
+        return $this->sqlMap;
     }
 
     /**
@@ -89,125 +79,6 @@ class Mapper {
     }
 
     /**
-     * xml to statement
-     *
-     * @param string $namespace
-     * @param \DOMElement $elem
-     * @param AbstractStatement $parent
-     * @return AbstractStatement
-     */
-    function parseXml($namespace = '', $elem, $parent = NULL) {
-        $current = NULL;
-        switch ($elem->nodeType) {
-            case XML_TEXT_NODE:
-            case XML_CDATA_SECTION_NODE:
-                $text = trim($elem->textContent);
-                if ($text) {
-                    $current = new TextStatement($text);
-                    if ($parent) {
-                        $parent->append($current);
-                    }
-                }
-                return $current;
-        }
-        $nodeName = $elem->nodeName;
-        switch ($nodeName) {
-            case 'sql':
-                $current = new SqlStatement($namespace . $elem->getAttribute('id'));
-                break;
-            case 'selectKey':
-                $current = new SelectKeyStatement($elem->getAttribute('keyProperty'), $elem->getAttribute('order'), $elem->getAttribute('resultType'));
-                break;
-            case 'include':
-                $current = new IncludeStatement($namespace . $elem->getAttribute('refid'));
-                break;
-            case 'select':
-                $current = new SelectStatement($namespace . $elem->getAttribute('id'), $elem->getAttribute('resultType'));
-                break;
-            case 'insert':
-                $current = new InsertStatement($namespace . $elem->getAttribute('id'), $elem->getAttribute('useGeneratedKeys'), $elem->getAttribute('keyProperty'));
-                break;
-            case 'update':
-                $current = new UpdateStatement($namespace . $elem->getAttribute('id'));
-                break;
-            case 'delete':
-                $current = new DeleteStatement($namespace . $elem->getAttribute('id'));
-                break;
-            case 'foreach':
-                $current = new ForEachStatement($elem->getAttribute('collection'), $elem->getAttribute('item'), $elem->getAttribute('index'), $elem->getAttribute('open'), $elem->getAttribute('close'), $elem->getAttribute('separator'));
-                break;
-            case 'choose':
-                $current = new ChooseStatement();
-                break;
-            case 'when':
-                $current = new WhenStatement($elem->getAttribute('test'));
-                break;
-            case 'otherwise':
-                $current = new OtherwiseStatement();
-                break;
-            case 'if':
-                $current = new IfStatement($elem->getAttribute('test'));
-                break;
-            case 'set':
-                $current = new SetStatement();
-                break;
-            case 'where':
-                $current = new WhereStatement();
-                break;
-        }
-        if ($current) {
-            if ($parent) {
-                $parent->append($current);
-            }
-            if ($elem->hasChildNodes()) {
-                foreach ($elem->childNodes as $child) {
-                    $this->parseXml($namespace, $child, $current);
-                }
-            }
-        }
-        return $current;
-    }
-
-    /**
-     * initialize mapper xml dom
-     *
-     * @param DOMDocument $simple_xml_dom
-     * @return void
-     */
-    public function initXml($simple_xml_dom) {
-        $root = dom_import_simplexml($simple_xml_dom);
-        $namespace = trim($root->getAttribute('namespace'));
-        if ($namespace) {
-            $namespace .= '.';
-        }
-        foreach ($root->getElementsByTagName('sql') as $node) {
-            $statement = $this->parseXml($namespace, $node);
-            $statement->setMapper($this);
-            $this->statements['sql'][$statement->getId()] = $statement;
-        }
-        foreach ($root->getElementsByTagName('select') as $node) {
-            $statement = $this->parseXml($namespace, $node);
-            $statement->setMapper($this);
-            $this->statements['select'][$statement->getId()] = $statement;
-        }
-        foreach ($root->getElementsByTagName('insert') as $node) {
-            $statement = $this->parseXml($namespace, $node);
-            $statement->setMapper($this);
-            $this->statements['insert'][$statement->getId()] = $statement;
-        }
-        foreach ($root->getElementsByTagName('update') as $node) {
-            $statement = $this->parseXml($namespace, $node);
-            $statement->setMapper($this);
-            $this->statements['update'][$statement->getId()] = $statement;
-        }
-        foreach ($root->getElementsByTagName('delete') as $node) {
-            $statement = $this->parseXml($namespace, $node);
-            $statement->setMapper($this);
-            $this->statements['delete'][$statement->getId()] = $statement;
-        }
-    }
-
-    /**
      * set DB Connection config
      * array('url' => '', 'username' => '', 'password' => '')
      * 
@@ -222,63 +93,13 @@ class Mapper {
     }
 
     /**
-     * initialize "mapper" from mapper xml file
-     * @param string $mapper_xml_path : full path of mapper xml file
-     * @param string $cache_dir : directory full path of php code cache
-     * @return Mapper
-     */
-    public function initMapper($mapper_xml_path, $cache_dir = NULL) {
-        $this->logger->debug('INIT MAPPER START "' . $mapper_xml_path . '"');
-        $cache_path = '';
-        $cache_prefix = '';
-        if ($cache_dir) {
-            $cache_prefix = rtrim($cache_dir, \DIRECTORY_SEPARATOR) . \DIRECTORY_SEPARATOR . 'mapper-cache-' . md5(realpath($mapper_xml_path));
-            $cache_path = $cache_prefix . '-' . (filemtime($mapper_xml_path) + filemtime(__FILE__)) . '.php';
-        }
-        //코드 캐시파일이 있는 경우, 캐시파일 실행 후 종료
-        if ($cache_path && file_exists($cache_path)) {
-            include($cache_path);
-            $this->logger->debug('INIT MAPPER COMPLETE FROM CACHE');
-            return $this;
-        }
-        $this->initXml(simplexml_load_file($mapper_xml_path));
-        if ($cache_path) {
-            foreach (glob($cache_prefix . '*.php') as $cache_file) {
-                @unlink($cache_file);
-            }
-            $cache = fopen($cache_path, 'w');
-            if ($cache) {
-                fwrite($cache, '<' . '?php' . PHP_EOL);
-                foreach ($this->statements as $k => &$statements) {
-                    foreach ($statements as &$statement) {
-                        fwrite($cache, '$this->statements["' . $k . '"]["' . $statement->getId() . '"]=' . $statement->__toSource() . ';' . PHP_EOL);
-                        fwrite($cache, '$this->statements["' . $k . '"]["' . $statement->getId() . '"]->setMapper($this);' . PHP_EOL);
-                    }
-                }
-                fwrite($cache, '?' . '>');
-                fclose($cache);
-            } else {
-                $this->logger->warning('WRITE MAPPER CACHE FAILED');
-            }
-        }
-        $this->logger->debug('INIT MAPPER COMPLETE');
-        return $this;
-    }
-
-    /**
      * initilize "configuration" from sqlmap config xml file
      * @param string $config_xml_path : full path of configuration xml file
      * @param string $cache_dir : directory full path of php code cache
      * @return Mapper
      */
     public function init($config_xml_path, $cache_dir = NULL) {
-        $this->statements = [
-            'sql' => [],
-            'select' => [],
-            'insert' => [],
-            'update' => [],
-            'delete' => []
-        ];
+        $this->sqlMap->resetMappers();
 
         $sqlMapDir = dirname(realpath($config_xml_path));
         $sqlMapConfig = simplexml_load_file($config_xml_path);
@@ -307,7 +128,7 @@ class Mapper {
             foreach ($mappers as $mapper) {
                 $attr = $mapper->attributes();
                 if ($attr && isset($attr['resource'])) {
-                    $this->initMapper($sqlMapDir . \DIRECTORY_SEPARATOR . $attr['resource'], $cache_dir);
+                    $this->sqlMap->loadMapper($sqlMapDir . \DIRECTORY_SEPARATOR . $attr['resource'], $cache_dir);
                 }
             }
         }
@@ -316,26 +137,12 @@ class Mapper {
     }
 
     /**
-     * get statement object
-     *
-     * @param string $category
-     * @param string $id
-     * @return AbstractStatement
-     */
-    public function getStatement($category, $id) {
-        if (!isset($this->statements[$category][$id])) {
-            throw new \Exception('Undefined index in mapper::statements[' . $category . '][' . $id . ']');
-        }
-        return $this->statements[$category][$id];
-    }
-
-    /**
      * convert value to given type
      * @param mixed $value
      * @param string $type
      * @return void
      */
-    public function _converTo($value, $type) {
+    public function _convertTo($value, $type) {
         switch (strtolower($type)) {
             case 'bool':
             case 'boolean':
@@ -361,7 +168,7 @@ class Mapper {
      */
     public function select($id, $param = NULL) {
         $this->logger->debug('SELECT STATEMENT [' . $id  . '] START', [$param]);
-        $statement = $this->getStatement('select', $id);
+        $statement = $this->sqlMap->getStatement('select', $id);
         $sqlParam = [];
         $sqlText = $statement->parse($param, $sqlParam);
         $resultType = $statement->getAttribute('resultType');
@@ -398,7 +205,7 @@ class Mapper {
      */
     public function selectOne($id, $param = NULL) {
         $this->logger->debug('SELECT STATEMENT [' . $id . '] START', [$param]);
-        $statement = $this->getStatement('select', $id);
+        $statement = $this->sqlMap->getStatement('select', $id);
         $sqlParam = [];
         $sqlText = $statement->parse($param, $sqlParam);
         $resultType = $statement->getAttribute('resultType');
@@ -411,7 +218,7 @@ class Mapper {
             case 'double':
             case 'float':
             case 'string':
-                $result = $this->_converTo($this->getSession()->queryValue($sqlText, $sqlParam), $resultType);
+                $result = $this->_convertTo($this->getSession()->queryValue($sqlText, $sqlParam), $resultType);
                 break;
             case '':
             case 'array':
@@ -433,7 +240,7 @@ class Mapper {
      */
     public function insert($id, $param = NULL) {
         $this->logger->debug('INSERT STATEMENT [' . $id . '] START', [$param]);
-        $statement = $this->getStatement('insert', $id);
+        $statement = $this->sqlMap->getStatement('insert', $id);
         /** @var SelectKeyStatement $selectKey */
         $selectKey = $statement->getSelectKey();
         if ($selectKey) {
@@ -446,7 +253,7 @@ class Mapper {
                 if (is_array($param)) {
                     $param[$keyProperty] = $this->_convertTo($lastInsertId, $resultType);
                 } else if (is_object($param)) {
-                    $param->{$keyProperty} = $this->_converTo($lastInsertId, $resultType);
+                    $param->{$keyProperty} = $this->_convertTo($lastInsertId, $resultType);
                 }
                 $sqlParam = [];
                 $sqlText = $statement->parse($param, $sqlParam);
@@ -464,7 +271,7 @@ class Mapper {
                 if (is_array($param)) {
                     $param[$keyProperty] = $this->_convertTo($lastInsertId, $resultType);
                 } else if (is_object($param)) {
-                    $param->{$keyProperty} = $this->_converTo($lastInsertId, $resultType);
+                    $param->{$keyProperty} = $this->_convertTo($lastInsertId, $resultType);
                 }
             }
         }
@@ -497,7 +304,7 @@ class Mapper {
      */
     public function update($id, $param = NULL) {
         $this->logger->debug('UPDATE STATEMENT [' . $id . '] START', [$param]);
-        $statement = $this->getStatement('update', $id);
+        $statement = $this->sqlMap->getStatement('update', $id);
         $sqlParam = [];
         $sqlText = $statement->parse($param, $sqlParam);
         $result = $this->getSession()->execute($sqlText, $sqlParam);
@@ -513,7 +320,7 @@ class Mapper {
      */
     public function delete($id, $param = NULL) {
         $this->logger->debug('DELETE STATEMENT [' . $id . '] START', [$param]);
-        $statement = $this->getStatement('update', $id);
+        $statement = $this->sqlMap->getStatement('update', $id);
         $sqlParam = [];
         $sqlText = $statement->parse($param, $sqlParam);
         $result = $this->getSession()->execute($sqlText, $sqlParam);

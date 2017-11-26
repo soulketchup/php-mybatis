@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 
 require_once '../src/autoloader.php';
 
-use Ketchup\MyBatis\Mapper;
+use Ketchup\MyBatis\SqlMap;
 
 $xml = isset($_POST['xml']) ? $_POST['xml'] : '';
 $param = isset($_POST['param']) ? $_POST['param'] : '';
@@ -79,7 +79,8 @@ function resultText() {
         return 'XML Error';
     }
     $model = json_decode($param);
-    $mapper = Mapper::instance();
+    $mapper = new SqlMap();
+    $mapper->setNamedParameterPrefix('?');
     try {
         $mapper->initXml($dom);
     } catch (\Exception $e) {
