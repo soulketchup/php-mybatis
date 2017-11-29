@@ -38,10 +38,7 @@ class IncludeStatement extends AbstractStatement {
      * @return string : generated sql query text
      */
     public function parse(&$context, &$param = [], &$bindings = []) {
-        if ($this->mapper) {
-            return $this->mapper->getStatement('sql', $this->refid)->parse($context, $param , $bindings);
-        }
-        return ' ';
+        return $this->sqlmap->getStatement('sql', $this->refid)->parse($context, $param , $bindings);
     }
 
     public function __toSource() {
