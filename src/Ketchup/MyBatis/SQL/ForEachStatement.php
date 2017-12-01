@@ -68,7 +68,14 @@ class ForEachStatement extends AbstractStatement {
         $open = $this->open;
         $close = $this->close;
         $separator = $this->separator;
-        $list = $this->parseExpression($this->collection, $context, $bindings);
+        if (empty($this->collection))
+        {
+            $list = $context;
+        }
+        else
+        {
+            $list = $this->parseExpression($this->collection, $context, $bindings);
+        }
         foreach ($list as $k => &$v) {
             $query2 = [];
             if ($this->item) {
