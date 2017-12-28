@@ -17,7 +17,7 @@ class Cast {
         foreach (get_class_methods($class_name) as $method) {
             if (strlen($method) > 3 && substr($method, 0, 3) == 'set') {
                 $k = substr($method, 3);
-                if (isset($array[$key_repfix . $k])) {
+                if (isset($array[$key_prefix . $k])) {
                     $item->{$method}($array[$key_prefix . $k]);
                 }
             }
